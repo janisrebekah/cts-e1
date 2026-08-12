@@ -14,6 +14,22 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Auto-clear session on 401 and redirect to login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      sessionStorage.removeItem('accessToken')
+      sessionStorage.removeItem('user')
+      // Only redirect if we're not already on the login page (avoid loops)
+      if (window.location.pathname !== '/login') {
+        window.location.replace('/login')
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
 export function getErrorMessage(error) {
   return error.response?.data?.detail || 'Something went wrong. Please try again.'
 }
