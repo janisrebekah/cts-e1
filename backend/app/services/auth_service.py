@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 from typing import Any
 
 from fastapi import Depends, Header, HTTPException, status
@@ -32,6 +33,14 @@ def _encode(data: dict[str, Any]) -> str:
 def _decode(value: str) -> dict[str, Any]:
     padding = "=" * (-len(value) % 4)
     return json.loads(base64.urlsafe_b64decode((value + padding).encode("utf-8")))
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _normalize_phone(phone_number: str) -> str:
+    return re.sub(r"\D", "", phone_number)
 
 
 def create_token(user: dict[str, Any]) -> str:
@@ -65,12 +74,14 @@ def verify_token(token: str) -> dict[str, Any]:
 
 
 def login(email: str, phone_number: str) -> dict[str, Any]:
+    normalized_email = _normalize_email(email)
+    normalized_phone = _normalize_phone(phone_number)
+
     try:
         response = (
             supabase.table("users")
             .select("user_id,name,email,phone_number,role,created_at")
-            .eq("email", email)
-            .eq("phone_number", phone_number)
+            .ilike("email", normalized_email)
             .limit(1)
             .execute()
         )
@@ -81,6 +92,10 @@ def login(email: str, phone_number: str) -> dict[str, Any]:
         raise AuthServiceError("Invalid email or phone number", 401)
 
     user = response.data[0]
+    stored_phone = _normalize_phone(str(user.get("phone_number", "")))
+    if normalized_phone != stored_phone:
+        raise AuthServiceError("Invalid email or phone number", 401)
+
     if user.get("role") not in ALLOWED_ROLES:
         raise AuthServiceError("Invalid user role", 403)
 
